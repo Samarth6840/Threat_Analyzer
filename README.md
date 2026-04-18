@@ -92,6 +92,12 @@ This project demonstrates expertise in:
 - Professional UI/UX design
 - Concurrent programming in Python
 
+#images
+<img width="322" height="759" alt="image" src="https://github.com/user-attachments/assets/b7684772-04d5-4106-83a9-5e74e549c7f9" />
+
+<img width="750" height="818" alt="image" src="https://github.com/user-attachments/assets/2b4f9598-2178-400c-adec-59ad29351ed7" />
+
+
 ## License
 
 MIT License - feel free to use for learning and portfolio purposes.
