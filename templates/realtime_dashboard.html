@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Real-time Threat Intelligence</title>
+  <meta name="description" content="Live real-time Apache log monitoring with instant threat detection and visualization.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --card-border: #e2e8f0;
+      --card-border-hover: #cbd5e1;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --primary-glow: rgba(59, 130, 246, 0.12);
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --text-bright: #0f172a;
+      --danger: #ef4444;
+      --danger-glow: rgba(239, 68, 68, 0.1);
+      --warning: #f59e0b;
+      --purple: #8b5cf6;
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.1);
+    }
+
+    * { box-sizing: border-box; }
+    
+    body {
+      margin: 0;
+      font-family: 'Inter', -apple-system, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .page {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      animation: fadeIn 0.5s ease-in;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; box-shadow: 0 0 8px var(--danger); }
+      50% { opacity: 0.4; box-shadow: 0 0 2px var(--danger); }
+      100% { opacity: 1; box-shadow: 0 0 8px var(--danger); }
+    }
+
+    @keyframes slideInRow {
+      from { opacity: 0; transform: translateX(-12px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 28px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-bright);
+    }
+
+    .live-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      background: var(--danger);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .status-badge.idle {
+      background: #f1f5f9;
+      color: var(--text-muted);
+      border: 1px solid var(--card-border);
+    }
+
+    .status-badge.streaming {
+      background: var(--danger-glow);
+      color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .buttons {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    a.button {
+      display: inline-flex;
+      align-items: center;
+      padding: 9px 16px;
+      border-radius: 10px;
+      background: var(--surface);
+      color: #334155;
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 13px;
+      transition: all 0.2s;
+      border: 1px solid var(--card-border);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+
+    a.button:hover {
+      background: #f8fafc;
+      border-color: #94a3b8;
+      transform: translateY(-1px);
+    }
+
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    .card {
+      background: var(--surface);
+      border-radius: 16px;
+      padding: 24px;
+      border: 1px solid var(--card-border);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0,0,0,0.01);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      border-color: var(--card-border-hover);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+    }
+
+    .stat { text-align: left; position: relative; overflow: hidden; }
+    
+    .stat-label {
+      margin: 0 0 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+    
+    .stat-number {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.02em;
+      font-variant-numeric: tabular-nums;
+      transition: all 0.3s ease;
+    }
+
+    .stat-number.changed {
+      color: var(--primary);
+      transform: scale(1.05);
+    }
+
+    h2 {
+      margin: 0 0 20px;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chart-container {
+      position: relative;
+      height: 300px;
+      width: 100%;
+    }
+
+    #map {
+      width: 100%;
+      height: 400px;
+      border-radius: 8px;
+      background: #e2e8f0;
+      border: 1px solid var(--card-border);
+      z-index: 1;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    th {
+      font-weight: 600;
+      color: var(--text-muted);
+      background: #f8fafc;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8fafc; }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: #334155;
+      background: #f1f5f9;
+      padding: 4px 6px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .threat-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-brute { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .badge-sqli { background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; }
+    .badge-ddos { background: #ede9fe; color: #6d28d9; border: 1px solid #c4b5fd; }
+    .badge-scanner { background: #d1fae5; color: #047857; border: 1px solid #6ee7b7; }
+
+    /* Config Panel */
+    .config-panel {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+    }
+
+    .config-input-group {
+      flex: 1;
+    }
+
+    .config-input-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .config-input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      font-family: ui-monospace, monospace;
+      font-size: 13px;
+      background: var(--surface);
+      color: var(--text);
+      transition: all 0.2s;
+    }
+
+    .config-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-glow);
+    }
+
+    .config-input::placeholder {
+      color: #94a3b8;
+    }
+
+    .btn {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(59, 130, 246, 0.35);
+    }
+
+    .btn-success {
+      background: #ecfdf5;
+      color: #047857;
+      border: 1px solid #a7f3d0;
+    }
+
+    .btn-success:hover {
+      background: #d1fae5;
+    }
+
+    .btn-stop {
+      background: #fef2f2;
+      color: var(--danger);
+      border: 1px solid #fca5a5;
+      display: none;
+    }
+
+    .btn-stop:hover {
+      background: #fee2e2;
+    }
+
+    .config-error {
+      color: var(--danger);
+      margin-top: 8px;
+      font-size: 12px;
+    }
+
+    /* Live Feed — Dark terminal */
+    .live-feed-container {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    .live-feed-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 20px;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+    }
+
+    .live-feed-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .live-feed-counter {
+      font-size: 12px;
+      color: #94a3b8;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .live-feed {
+      padding: 16px 20px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11.5px;
+      height: 180px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      line-height: 1.5;
+    }
+
+    .live-feed::-webkit-scrollbar { width: 6px; }
+    .live-feed::-webkit-scrollbar-track { background: transparent; }
+    .live-feed::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+    .log-line { color: #34d399; }
+    .log-line.threat { color: #f87171; font-weight: 500; }
+    .log-line.system { color: #94a3b8; font-style: italic; }
+
+    .section-card {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .section-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--card-border);
+      background: #f8fafc;
+    }
+
+    .section-header h2 {
+      margin: 0;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #94a3b8;
+      font-size: 13px;
+    }
+
+    .table-container { filter: drop-shadow(0 4px 6px rgba(0,0,0,0.02)); }
+
+    @media (max-width: 1024px) {
+      .grid-4 { grid-template-columns: repeat(2, 1fr); }
+      .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .grid-4 { grid-template-columns: 1fr; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .config-panel { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <!-- Header -->
+    <div class="header">
+      <h1>
+        <span class="live-dot" id="liveDot"></span>
+        Real-time Intelligence
+        <span class="status-badge idle" id="statusBadge">Idle</span>
+      </h1>
+      <div class="buttons">
+        <a class="button" href="{{ url_for('history') }}">
+          <svg style="width:14px;height:14px;margin-right:6px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1.5 3 3 3h10c1.5 0 3-1 3-3V7m-16 0c0-2 1.5-3 3-3h10c1.5 0 3 1 3 3m-16 0h16"></path></svg>
+          View Database
+        </a>
+        <a class="button" href="{{ url_for('index') }}">← New Scan</a>
+      </div>
+    </div>
+
+    <!-- Config -->
+    <div class="card" style="margin-bottom: 16px;">
+      <h2 style="margin: 0 0 14px 0;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Configure Live Stream
+      </h2>
+      <form id="config-form" class="config-panel">
+        <div class="config-input-group">
+          <label>Log File Path</label>
+          <input type="text" id="logPath" placeholder="/var/log/apache2/access.log" class="config-input">
+        </div>
+        <button type="submit" class="btn btn-primary" id="startBtn">Start Streaming</button>
+        <button type="button" class="btn btn-stop" id="stopBtn">Stop</button>
+      </form>
+      <div id="config-error" class="config-error"></div>
+      <div style="margin-top: 14px; display: flex; align-items: center; gap: 12px;">
+        <button type="button" id="generateTestBtn" class="btn btn-success">
+          Generate Test Traffic
+        </button>
+        <span style="color: var(--text-muted); font-size: 12px;">Launches a local server that generates realistic Apache logs with embedded attack patterns</span>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid-4" style="margin-bottom: 16px;">
+      <div class="card stat" style="border-top: 4px solid #3b82f6;">
+        <div class="stat-label">Total Volume</div>
+        <div id="stat-total-requests" class="stat-number">0</div>
+      </div>
+      <div class="card stat" style="border-top: 4px solid #ef4444;">
+        <div class="stat-label">Malicious IPs</div>
+        <div id="stat-total-threats" class="stat-number">0</div>
+      </div>
+      <div class="card stat" style="border-top: 4px solid #f59e0b;">
+        <div class="stat-label">Auth Attacks</div>
+        <div id="stat-brute-force" class="stat-number">0</div>
+      </div>
+      <div class="card stat" style="border-top: 4px solid #8b5cf6;">
+        <div class="stat-label">SQL Injection</div>
+        <div id="stat-sqli" class="stat-number">0</div>
+      </div>
+    </div>
+
+    <!-- Live Feed (dark terminal) -->
+    <div class="live-feed-container" style="margin-bottom: 16px;">
+      <div class="live-feed-header">
+        <div class="live-feed-title">
+          <span class="live-dot" style="width:7px;height:7px"></span>
+          Live Traffic Stream
+        </div>
+        <div class="live-feed-counter" id="feedCounter">0 events processed</div>
+      </div>
+      <div id="liveFeed" class="live-feed">
+        <div class="log-line system">[System] Waiting for stream configuration...</div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="grid-3" style="margin-bottom: 16px;">
+      <div class="card">
+        <h2>HTTP Status Distribution</h2>
+        <div class="chart-container">
+          <canvas id="statusChart"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Requests per Hour</h2>
+        <div class="chart-container">
+          <canvas id="hourlyChart"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Top IPs by Volume</h2>
+        <div class="chart-container">
+          <canvas id="topIpChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Map -->
+    <div class="card section-card" style="margin-bottom: 16px;">
+      <div class="section-header">
+        <h2>GEO-Spatial Threat Distribution</h2>
+      </div>
+      <div id="map"></div>
+    </div>
+
+    <!-- Tables -->
+    <div class="grid-2" style="margin-bottom: 16px;">
+      <div class="card section-card table-container">
+        <div class="section-header">
+          <h2>High-Volume Sources</h2>
+        </div>
+        <table id="top-ips-table">
+          <thead><tr><th>IP Address</th><th style="text-align: right;">Count</th></tr></thead>
+          <tbody>
+            <tr><td colspan="2" class="empty-state">Awaiting data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card section-card table-container">
+        <div class="section-header">
+          <h2>Top Targeted Endpoints</h2>
+        </div>
+        <table id="top-urls-table">
+          <thead><tr><th>Endpoint URI</th><th style="text-align: right;">Hits</th></tr></thead>
+          <tbody>
+            <tr><td colspan="2" class="empty-state">Awaiting data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Threats -->
+    <div class="card section-card table-container">
+      <div class="section-header">
+        <h2>Confirmed Threat Indicators (IoCs)</h2>
+      </div>
+      <table id="threat-table">
+        <thead><tr><th>Source IP</th><th>Attack Signature</th><th>Severity / Metric</th><th>Time</th></tr></thead>
+        <tbody>
+          <tr><td colspan="4" class="empty-state">No threats detected yet. Start streaming to begin analysis.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    // ================================================================
+    //  STATE
+    // ================================================================
+    const state = {
+      totalRequests: 0,
+      bruteForce: 0,
+      sqli: 0,
+      ddos: 0,
+      scanner: 0,
+      statusDistribution: {},
+      hourlyTraffic: Array(24).fill(0),
+      topIps: {},
+      topUrls: {},
+      maliciousIps: new Set(),
+      logCount: 0,
+      isStreaming: false,
+      threatTableHasPlaceholder: true
+    };
+
+    // ================================================================
+    //  DOM
+    // ================================================================
+    const configForm = document.getElementById('config-form');
+    const logPathInput = document.getElementById('logPath');
+    const configError = document.getElementById('config-error');
+    const feed = document.getElementById('liveFeed');
+    const feedCounter = document.getElementById('feedCounter');
+    const statusBadge = document.getElementById('statusBadge');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const generateTestBtn = document.getElementById('generateTestBtn');
+
+    let pollInterval = null;
+    let lastPosition = 0;
+
+    // ================================================================
+    //  WebSocket
+    // ================================================================
+    let socket;
+    try {
+      socket = io();
+      socket.on('new_log', function(data) {
+        if (data.log) addLogLine(data.log, isThreatLog(data.log));
+        if (data.enriched && Object.keys(data.enriched).length > 0) {
+          updateFromEnriched(data.enriched);
+        }
+      });
+    } catch(e) {
+      console.log('WebSocket not available, using polling only');
+    }
+
+    // ================================================================
+    //  Controls
+    // ================================================================
+    generateTestBtn.addEventListener('click', function() {
+      generateTestBtn.textContent = 'Generating...';
+      generateTestBtn.disabled = true;
+      configError.textContent = '';
+      
+      fetch('/api/generate_test_traffic', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          generateTestBtn.textContent = 'Generate Test Traffic';
+          generateTestBtn.disabled = false;
+          if (data.path) {
+            logPathInput.value = data.path;
+            addLogLine(`[System] Test server started on port ${data.port}. Log: ${data.path}`, false, true);
+            startPolling(data.path);
+          } else if (data.error) {
+            configError.textContent = data.error;
+          }
+        })
+        .catch(err => {
+          generateTestBtn.textContent = 'Generate Test Traffic';
+          generateTestBtn.disabled = false;
+          configError.textContent = 'Failed: ' + err.message;
+        });
+    });
+    
+    configForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const logPath = logPathInput.value.trim();
+      if (!logPath) { configError.textContent = 'Please enter a log file path'; return; }
+      configError.textContent = '';
+      startPolling(logPath);
+    });
+
+    stopBtn.addEventListener('click', stopPolling);
+    
+    function startPolling(logPath) {
+      if (pollInterval) clearInterval(pollInterval);
+      lastPosition = 0;
+      state.isStreaming = true;
+      statusBadge.className = 'status-badge streaming';
+      statusBadge.textContent = 'Streaming';
+      startBtn.style.display = 'none';
+      stopBtn.style.display = 'inline-block';
+      addLogLine(`[System] Connected to ${logPath} — Streaming active`, false, true);
+      
+      pollInterval = setInterval(() => {
+        fetch('/api/poll_logs?path=' + encodeURIComponent(logPath) + '&pos=' + lastPosition)
+          .then(res => res.json())
+          .then(data => {
+            if (data.error) { configError.textContent = data.error; stopPolling(); return; }
+            if (data.logs && data.logs.length > 0) {
+              data.logs.forEach(log => addLogLine(log, isThreatLog(log)));
+              lastPosition = data.position;
+              state.logCount += data.logs.length;
+              feedCounter.textContent = `${state.logCount.toLocaleString()} events processed`;
+            }
+            if (data.results && Object.keys(data.results).length > 0) {
+              updateFromEnriched(data.results);
+            }
+          })
+          .catch(err => console.error('Poll error:', err));
+      }, 1500);
+    }
+
+    function stopPolling() {
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      state.isStreaming = false;
+      statusBadge.className = 'status-badge idle';
+      statusBadge.textContent = 'Stopped';
+      startBtn.style.display = 'inline-block';
+      stopBtn.style.display = 'none';
+      addLogLine('[System] Stream stopped', false, true);
+    }
+
+    // ================================================================
+    //  Core Update
+    // ================================================================
+    function updateFromEnriched(res) {
+      if (!res || typeof res !== 'object') return;
+
+      if (res.total_requests) {
+        state.totalRequests += res.total_requests;
+        animateStat('stat-total-requests', state.totalRequests.toLocaleString());
+      }
+
+      if (res.status_distribution) {
+        Object.entries(res.status_distribution).forEach(([s, c]) => {
+          state.statusDistribution[s] = (state.statusDistribution[s] || 0) + c;
+        });
+        updateStatusChart();
+      }
+
+      if (res.hourly_traffic) {
+        Object.entries(res.hourly_traffic).forEach(([h, c]) => {
+          const hour = parseInt(h);
+          if (!isNaN(hour) && hour >= 0 && hour < 24) state.hourlyTraffic[hour] += c;
+        });
+        updateHourlyChart();
+      }
+
+      if (res.top_ips) {
+        Object.entries(res.top_ips).forEach(([ip, c]) => {
+          state.topIps[ip] = (state.topIps[ip] || 0) + c;
+        });
+        updateTopIpsTable();
+        updateTopIpChart();
+      }
+
+      if (res.top_urls) {
+        Object.entries(res.top_urls).forEach(([url, c]) => {
+          state.topUrls[url] = (state.topUrls[url] || 0) + c;
+        });
+        updateTopUrlsTable();
+      }
+
+      const now = new Date().toLocaleTimeString();
+      let hasThreat = false;
+
+      if (res.brute_force && res.brute_force.flagged) {
+        Object.entries(res.brute_force.flagged).forEach(([ip, count]) => {
+          if (!state.maliciousIps.has('bf_' + ip)) {
+            state.bruteForce++;
+            state.maliciousIps.add('bf_' + ip);
+            addThreatRow(ip, 'Brute Force', `${count} failed auth attempts`, 'badge-brute', now);
+            hasThreat = true;
+          }
+        });
+      }
+
+      if (res.sqli && res.sqli.flagged) {
+        Object.entries(res.sqli.flagged).forEach(([ip, urls]) => {
+          if (!state.maliciousIps.has('sqli_' + ip)) {
+            state.sqli++;
+            state.maliciousIps.add('sqli_' + ip);
+            addThreatRow(ip, 'SQL Injection', `${urls.length} malicious payloads`, 'badge-sqli', now);
+            hasThreat = true;
+          }
+        });
+      }
+
+      if (res.ddos && res.ddos.flagged) {
+        Object.entries(res.ddos.flagged).forEach(([ip, rpm]) => {
+          if (!state.maliciousIps.has('ddos_' + ip)) {
+            state.ddos++;
+            state.maliciousIps.add('ddos_' + ip);
+            addThreatRow(ip, 'DDoS', `Peak ${rpm} req/min`, 'badge-ddos', now);
+            hasThreat = true;
+          }
+        });
+      }
+
+      if (res.scanner && res.scanner.flagged) {
+        Object.entries(res.scanner.flagged).forEach(([ip, paths]) => {
+          if (!state.maliciousIps.has('scan_' + ip)) {
+            state.scanner++;
+            state.maliciousIps.add('scan_' + ip);
+            addThreatRow(ip, 'Scanner', `${paths.length} sensitive paths`, 'badge-scanner', now);
+            hasThreat = true;
+          }
+        });
+      }
+
+      if (hasThreat) {
+        const uniqueIps = new Set();
+        state.maliciousIps.forEach(k => uniqueIps.add(k.split('_').slice(1).join('_')));
+        animateStat('stat-total-threats', uniqueIps.size);
+        animateStat('stat-brute-force', state.bruteForce);
+        animateStat('stat-sqli', state.sqli);
+      }
+
+      if (res.geo_threats && res.geo_threats.length > 0) {
+        res.geo_threats.forEach(t => addMapMarker(t));
+      }
+    }
+
+    // ================================================================
+    //  Helpers
+    // ================================================================
+    function animateStat(id, value) {
+      const el = document.getElementById(id);
+      el.textContent = value;
+      el.classList.add('changed');
+      setTimeout(() => el.classList.remove('changed'), 600);
+    }
+
+    function addLogLine(text, isThreat, isSystem) {
+      const line = document.createElement('div');
+      line.className = 'log-line' + (isThreat ? ' threat' : '') + (isSystem ? ' system' : '');
+      if (!isSystem) {
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      } else {
+        line.textContent = text;
+      }
+      feed.appendChild(line);
+      while (feed.childNodes.length > 100) feed.removeChild(feed.firstChild);
+      feed.scrollTop = feed.scrollHeight;
+    }
+
+    function isThreatLog(log) {
+      const lower = log.toLowerCase();
+      return lower.includes('nikto') || lower.includes('sqlmap') ||
+             lower.includes('wp-admin') || lower.includes('phpmyadmin') ||
+             lower.includes('.env') || lower.includes('etc/passwd') ||
+             / 401 | 403 /.test(log);
+    }
+
+    // ================================================================
+    //  Charts
+    // ================================================================
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    Chart.defaults.color = "#64748b";
+    
+    const statusChart = new Chart(document.getElementById('statusChart'), {
+      type: 'doughnut',
+      data: {
+        labels: [],
+        datasets: [{ data: [], backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'], borderWidth: 2, borderColor: '#ffffff' }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } }, cutout: '65%' }
+    });
+
+    function updateStatusChart() {
+      statusChart.data.labels = Object.keys(state.statusDistribution);
+      statusChart.data.datasets[0].data = Object.values(state.statusDistribution);
+      statusChart.update('none');
+    }
+
+    const hourlyChart = new Chart(document.getElementById('hourlyChart'), {
+      type: 'line',
+      data: {
+        labels: Array(24).fill(0).map((_, i) => i + ':00'),
+        datasets: [{
+          label: 'Requests', data: Array(24).fill(0),
+          borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderWidth: 2, tension: 0.4, fill: true, pointRadius: 3
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { borderDash: [2, 4], color: '#e2e8f0' } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+
+    function updateHourlyChart() {
+      hourlyChart.data.datasets[0].data = state.hourlyTraffic;
+      hourlyChart.update('none');
+    }
+
+    const topIpChart = new Chart(document.getElementById('topIpChart'), {
+      type: 'bar',
+      data: {
+        labels: [],
+        datasets: [{ label: 'Requests', data: [], backgroundColor: '#8b5cf6', borderRadius: 4 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { borderDash: [2, 4], color: '#e2e8f0' } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+
+    function updateTopIpChart() {
+      const top5 = Object.entries(state.topIps).sort((a, b) => b[1] - a[1]).slice(0, 5);
+      topIpChart.data.labels = top5.map(x => x[0]);
+      topIpChart.data.datasets[0].data = top5.map(x => x[1]);
+      topIpChart.update('none');
+    }
+
+    // ================================================================
+    //  Tables & Map
+    // ================================================================
+    function updateTopIpsTable() {
+      const tbody = document.querySelector('#top-ips-table tbody');
+      const top = Object.entries(state.topIps).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      if (!top.length) return;
+      tbody.innerHTML = top.map(([ip, c]) =>
+        `<tr><td><code>${ip}</code></td><td style="text-align:right;font-weight:500">${c.toLocaleString()}</td></tr>`
+      ).join('');
+    }
+
+    function updateTopUrlsTable() {
+      const tbody = document.querySelector('#top-urls-table tbody');
+      const top = Object.entries(state.topUrls).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      if (!top.length) return;
+      tbody.innerHTML = top.map(([url, c]) =>
+        `<tr><td><code>${url}</code></td><td style="text-align:right;font-weight:500">${c.toLocaleString()}</td></tr>`
+      ).join('');
+    }
+
+    function addThreatRow(ip, type, details, badgeClass, time) {
+      const tbody = document.querySelector('#threat-table tbody');
+      if (state.threatTableHasPlaceholder) {
+        tbody.innerHTML = '';
+        state.threatTableHasPlaceholder = false;
+      }
+      const row = document.createElement('tr');
+      row.style.animation = 'slideInRow 0.3s ease-out';
+      row.innerHTML = `
+        <td><code>${ip}</code></td>
+        <td><span class="threat-badge ${badgeClass}">${type}</span></td>
+        <td style="color:var(--text-muted)">${details}</td>
+        <td style="color:var(--text-muted);font-size:12px">${time}</td>
+      `;
+      tbody.insertBefore(row, tbody.firstChild);
+      while (tbody.childNodes.length > 25) tbody.removeChild(tbody.lastChild);
+    }
+
+    const map = L.map('map', { zoomControl: true }).setView([20, 0], 2);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 18, attribution: '&copy; OpenStreetMap &copy; CARTO'
+    }).addTo(map);
+
+    const threatColors = { 'Brute Force': '#ef4444', 'SQL Injection': '#f59e0b', 'DDoS': '#8b5cf6', 'Scanner': '#10b981' };
+    const addedMarkers = new Set();
+
+    function addMapMarker(threat) {
+      const key = threat.ip;
+      if (addedMarkers.has(key)) return;
+      addedMarkers.add(key);
+      const color = threat.threatTypes && threat.threatTypes.length > 0 ? threatColors[threat.threatTypes[0]] || '#94a3b8' : '#94a3b8';
+      const popup = `
+        <div style="font-family:'Inter',sans-serif;font-size:12px;color:#1e293b;">
+          <b style="font-size:14px;color:#0f172a">${threat.ip}</b><br>
+          <hr style="margin:8px 0;border-top:1px solid #e2e8f0;border-bottom:none;">
+          <span style="color:#64748b">Loc:</span> ${threat.city}, ${threat.country}<br>
+          <span style="color:#64748b">ISP:</span> ${threat.isp}<br>
+          ${threat.abuseScore ? `<span style="color:#64748b">Abuse:</span> <span style="font-weight:600">${threat.abuseScore}%</span><br>` : ''}
+          <hr style="margin:8px 0;border-top:1px solid #e2e8f0;border-bottom:none;">
+          <b style="color:${color}">${threat.threatTypes.join(', ')}</b>
+        </div>
+      `;
+      L.circleMarker([threat.lat, threat.lon], {
+        radius: 8, fillColor: color, color: '#fff', weight: 1.5, opacity: 0.9, fillOpacity: 0.8
+      }).bindPopup(popup).addTo(map);
+    }
+  </script>
+</body>
+</html>

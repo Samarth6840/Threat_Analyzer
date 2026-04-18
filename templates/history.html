@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Persistent Threat History</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --card-border: #e2e8f0;
+      --primary: #3b82f6;
+      --text: #0f172a;
+      --text-muted: #64748b;
+    }
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .page {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      color: #0f172a;
+    }
+    a.button {
+      padding: 10px 16px;
+      border-radius: 10px;
+      background: #ffffff;
+      color: #334155;
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 13px;
+      border: 1px solid #cbd5e1;
+    }
+    .card {
+      background: var(--surface);
+      border-radius: 16px;
+      border: 1px solid var(--card-border);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+      overflow: hidden;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 14px 20px;
+      text-align: left;
+      border-bottom: 1px solid var(--card-border);
+    }
+    th {
+      font-weight: 600;
+      color: var(--text-muted);
+      background: #f8fafc;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+    tr:last-child td { border-bottom: none; }
+    code {
+      font-family: monospace;
+      background: #f1f5f9;
+      padding: 4px 6px;
+      border-radius: 6px;
+    }
+    .badge {
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .badge-High, .badge-Critical { background: #fee2e2; color: #b91c1c; }
+    .badge-Medium { background: #fef3c7; color: #b45309; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <h1>Historical Threat Database</h1>
+      <a class="button" href="{{ url_for('index') }}">← Back to Scanner</a>
+    </div>
+
+    <div class="card">
+      <div style="padding: 20px 24px; border-bottom: 1px solid var(--card-border); background: #f8fafc;">
+        <h2 style="margin: 0; font-size: 16px;">SQLite Persistent Storage</h2>
+        <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">This page reads directly from the persistent <code>threats.db</code> via SQLAlchemy.</p>
+      </div>
+      <table>
+        <tr>
+          <th>ID</th>
+          <th>Detection Time</th>
+          <th>Source IP</th>
+          <th>Threat Matrix</th>
+          <th>Severity</th>
+          <th>Details</th>
+        </tr>
+        {% for row in records %}
+        <tr>
+          <td style="color:#64748b">#{{ row.id }}</td>
+          <td>{{ row.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
+          <td><code>{{ row.ip_address }}</code></td>
+          <td style="font-weight:500;">{{ row.threat_type }}</td>
+          <td><span class="badge badge-{{ row.severity }}">{{ row.severity }}</span></td>
+          <td style="color:#64748b">{{ row.details }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" style="text-align: center; padding: 40px; color: #94a3b8;">
+            No historical threats recorded in the database yet. Run a scan to populate.
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Intelligence Overview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --card-border: #e2e8f0;
+      --primary: #3b82f6;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --purple: #8b5cf6;
+      --success: #10b981;
+    }
+
+    * { box-sizing: border-box; }
+    
+    body {
+      margin: 0;
+      font-family: 'Inter', -apple-system, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .page {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      animation: fadeIn 0.5s ease-in;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #0f172a;
+    }
+
+    h1 span {
+      display: none;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 12px;
+    }
+
+    a.button {
+      display: inline-flex;
+      align-items: center;
+      padding: 10px 16px;
+      border-radius: 10px;
+      background: #ffffff;
+      color: #334155;
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 13px;
+      transition: all 0.2s;
+      border: 1px solid #cbd5e1;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+
+    a.button:hover {
+      background: #f8fafc;
+      border-color: #94a3b8;
+      transform: translateY(-1px);
+    }
+
+    a.button.primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    a.button.primary:hover {
+      background: #2563eb;
+    }
+
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+    .card {
+      background: var(--surface);
+      border-radius: 16px;
+      padding: 24px;
+      border: 1px solid var(--card-border);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0,0,0,0.01);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      border-color: #cbd5e1;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+    }
+
+    .stat { text-align: left; position: relative; overflow: hidden; }
+    
+    .stat-label {
+      margin: 0 0 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+    
+    .stat-number {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.02em;
+    }
+
+    h2 {
+      margin: 0 0 20px;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chart-container {
+      position: relative;
+      height: 300px;
+      width: 100%;
+    }
+
+    #map {
+      width: 100%;
+      height: 400px;
+      border-radius: 8px;
+      background: #e2e8f0;
+      border: 1px solid var(--card-border);
+      z-index: 1;
+    }
+
+    .table-container { filter: drop-shadow(0 4px 6px rgba(0,0,0,0.02)); }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    th {
+      font-weight: 600;
+      color: var(--text-muted);
+      background: #f8fafc;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    
+    tr:hover td { background: #f8fafc; }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: #334155;
+      background: #f1f5f9;
+      padding: 4px 6px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .threat-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-brute { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .badge-sqli { background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; }
+    .badge-ddos { background: #ede9fe; color: #6d28d9; border: 1px solid #c4b5fd; }
+    .badge-scanner { background: #d1fae5; color: #047857; border: 1px solid #6ee7b7; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <h1>Intelligence Overview</h1>
+      <div class="buttons">
+        <a class="button" href="{{ url_for('history') }}">
+          <svg style="width:14px;height:14px;margin-right:6px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1.5 3 3 3h10c1.5 0 3-1 3-3V7m-16 0c0-2 1.5-3 3-3h10c1.5 0 3 1 3 3m-16 0h16M4 12h16"></path></svg>
+          View Database
+        </a>
+        <a class="button" href="{{ url_for('index') }}">← New Scan</a>
+        <a class="button primary" href="{{ url_for('report') }}">
+          <svg style="width:14px;height:14px;margin-right:6px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+          Export Core Report
+        </a>
+      </div>
+    </div>
+
+    <!-- Core Stats -->
+    <div class="grid-4" style="margin-bottom:24px">
+      <div class="card stat" style="border-top: 4px solid #3b82f6">
+        <div class="stat-label">Total Volume</div>
+        <div class="stat-number">{{ results.total_requests }}</div>
+      </div>
+      <div class="card stat" style="border-top: 4px solid #ef4444">
+        <div class="stat-label">Malicious IPs</div>
+        <div class="stat-number">{{ results.total_threats }}</div>
+      </div>
+      <div class="card stat" style="border-top: 4px solid #f59e0b">
+        <div class="stat-label">Auth Attacks</div>
+        <div class="stat-number">{{ results.brute_force.flagged|length }}</div>
+      </div>
+      <div class="card stat" style="border-top: 4px solid #8b5cf6">
+        <div class="stat-label">Exploits (e.g. SQLi)</div>
+        <div class="stat-number">{{ results.sqli.flagged|length }}</div>
+      </div>
+    </div>
+
+   
+
+    <!-- Charts Section -->
+    <div class="grid-3" style="margin-bottom:24px">
+      <div class="card">
+        <h2>HTTP Status Distribution</h2>
+        <div class="chart-container">
+          <canvas id="statusChart"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Hourly Traffic Pattern</h2>
+        <div class="chart-container">
+          <canvas id="hourlyChart"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Top Requesting IPs</h2>
+        <div class="chart-container">
+          <canvas id="topIpChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:24px; padding: 0; overflow: hidden;">
+      <div style="padding: 20px 24px; border-bottom: 1px solid var(--card-border); background: #f8fafc;">
+        <h2 style="margin: 0;">GEO-Spatial Threat Distribution</h2>
+      </div>
+      <div id="map"></div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:24px">
+      <div class="card table-container" style="padding: 0;">
+        <div style="padding: 20px 24px; border-bottom: 1px solid var(--card-border);">
+          <h2 style="margin: 0;">High-Volume Sources</h2>
+        </div>
+        <table>
+          <tr><th>IP Address</th><th style="text-align: right;">Request Count</th></tr>
+          {% for ip, count in results.top_ips.items() %}
+          <tr><td><code>{{ ip }}</code></td><td style="text-align: right; font-weight:500;">{{ count }}</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+      <div class="card table-container" style="padding: 0;">
+        <div style="padding: 20px 24px; border-bottom: 1px solid var(--card-border);">
+          <h2 style="margin: 0;">Top Targeted Endpoints</h2>
+        </div>
+        <table>
+          <tr><th>Endpoint URI</th><th style="text-align: right;">Hits</th></tr>
+          {% for url, count in results.top_urls.items() %}
+          <tr><td><code>{{ url }}</code></td><td style="text-align: right; font-weight:500;">{{ count }}</td></tr>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+
+    <div class="card table-container" style="padding: 0;">
+      <div style="padding: 20px 24px; border-bottom: 1px solid var(--card-border);">
+        <h2 style="margin: 0;">Confirmed Threat Indicators (IoCs)</h2>
+      </div>
+      <table>
+        <tr><th>Source IP</th><th>Attack Signature</th><th>Severity / Metric</th></tr>
+        {% for ip, count in results.brute_force.flagged.items() %}
+        <tr>
+          <td><code>{{ ip }}</code></td>
+          <td><span class="threat-badge badge-brute">Brute Force</span></td>
+          <td style="color:var(--text-muted)">{{ count }} failed attempts</td>
+        </tr>
+        {% endfor %}
+        {% for ip, urls in results.sqli.flagged.items() %}
+        <tr>
+          <td><code>{{ ip }}</code></td>
+          <td><span class="threat-badge badge-sqli">SQL Injection</span></td>
+          <td style="color:var(--text-muted)">{{ urls|length }} payloads</td>
+        </tr>
+        {% endfor %}
+        {% for ip, rpm in results.ddos.flagged.items() %}
+        <tr>
+          <td><code>{{ ip }}</code></td>
+          <td><span class="threat-badge badge-ddos">Volumetric DDoS</span></td>
+          <td style="color:var(--text-muted)">Peak {{ rpm }} req/min</td>
+        </tr>
+        {% endfor %}
+        {% for ip, paths in results.scanner.flagged.items() %}
+        <tr>
+          <td><code>{{ ip }}</code></td>
+          <td><span class="threat-badge badge-scanner">Vulnerability Scanner</span></td>
+          <td style="color:var(--text-muted)">{{ paths|length }} sensitive paths touched</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const rawStatusData = {{ results.status_distribution | tojson }};
+    const rawHourlyData = {{ results.hourly_traffic | tojson }};
+    const rawTopIpsData = {{ results.top_ips | tojson }};
+    const geoThreats = {{ (results.geo_threats | tojson) if results.geo_threats else '[]' }};
+
+    // --- 2. CHART CONFIGURATION ---
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    Chart.defaults.color = "#64748b";
+    
+    // Status Pie Chart
+    const statusLabels = Object.keys(rawStatusData);
+    const statusValues = Object.values(rawStatusData);
+    new Chart(document.getElementById('statusChart'), {
+      type: 'doughnut',
+      data: {
+        labels: statusLabels,
+        datasets: [{
+          data: statusValues,
+          backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'],
+          borderWidth: 2,
+          borderColor: '#ffffff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'right' }
+        },
+        cutout: '65%'
+      }
+    });
+
+    // Hourly Line Chart
+    const hourlyLabels = Object.keys(rawHourlyData).map(h => h + ':00');
+    const hourlyValues = Object.values(rawHourlyData);
+    new Chart(document.getElementById('hourlyChart'), {
+      type: 'line',
+      data: {
+        labels: hourlyLabels,
+        datasets: [{
+          label: 'Requests',
+          data: hourlyValues,
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderWidth: 2,
+          tension: 0.4,
+          fill: true,
+          pointRadius: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { borderDash: [2, 4], color: '#e2e8f0' } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+
+    // Top IPs Bar Chart (Top 5 only to fit nicely)
+    const topIpKeys = Object.keys(rawTopIpsData).slice(0, 5);
+    const topIpValues = topIpKeys.map(k => rawTopIpsData[k]);
+    new Chart(document.getElementById('topIpChart'), {
+      type: 'bar',
+      data: {
+        labels: topIpKeys,
+        datasets: [{
+          label: 'Requests',
+          data: topIpValues,
+          backgroundColor: '#8b5cf6',
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { borderDash: [2, 4], color: '#e2e8f0' } },
+          x: { grid: { display: false } }
+        }
+      }
+    });
+
+    // --- 3. MAP CONFIGURATION ---
+    const map = L.map('map', {zoomControl: true}).setView([20, 0], 2);
+    
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 18,
+      attribution: '© OpenStreetMap © CARTO'
+    }).addTo(map);
+
+    const threatColors = {
+      'Brute Force': '#ef4444',
+      'SQL Injection': '#f59e0b',
+      'DDoS': '#8b5cf6',
+      'Scanner': '#10b981'
+    };
+
+    geoThreats.forEach(threat => {
+      const color = threat.threatTypes.length > 0 ? threatColors[threat.threatTypes[0]] : '#94a3b8';
+      const popup = `
+        <div style="font-family:'Inter',sans-serif;font-size:12px;color:#1e293b;">
+          <b style="font-size:14px;color:#0f172a">${threat.ip}</b><br>
+          <hr style="margin:8px 0;border-top:1px solid #e2e8f0;border-bottom:none;">
+          <span style="color:#64748b">Loc:</span> ${threat.city}, ${threat.country}<br>
+          <span style="color:#64748b">ISP:</span> ${threat.isp}<br>
+          <span style="color:#64748b">Abuse:</span> <span style="font-weight:600">${threat.abuseScore}%</span><br>
+          <hr style="margin:8px 0;border-top:1px solid #e2e8f0;border-bottom:none;">
+          <b style="color:${color}">${threat.threatTypes.join(', ')}</b>
+        </div>
+      `;
+      L.circleMarker([threat.lat, threat.lon], {
+        radius: 8,
+        fillColor: color,
+        color: '#fff',
+        weight: 1.5,
+        opacity: 0.9,
+        fillOpacity: 0.8
+      }).bindPopup(popup).addTo(map);
+    });
+  </script>
+</body>
+</html>
